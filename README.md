@@ -41,8 +41,19 @@ E:\miniconda\envs\ml\python.exe scripts/train.py
 E:\miniconda\envs\ml\python.exe scripts/infer.py
 ```
 
-## 说明
+## 发布到 GitHub
 
-- 详细赛题背景与方案见 `doc/PLAN.md`
+数据目录已在 `.gitignore` 中排除，不会上传 parquet / 模型 / 提交文件。
+
+```powershell
+# 1. 首次需登录 GitHub CLI（浏览器授权一次即可）
+E:\miniconda\Library\bin\gh.exe auth login --hostname github.com --git-protocol ssh --web
+
+# 2. 创建仓库并推送
+powershell -ExecutionPolicy Bypass -File scripts/publish_github.ps1
+```
+
+默认仓库名：`xf-lookalike`，账户：`zlsama`（SSH 已配置）。
+
 - baseline 使用 LightGBM + 扁平化 map 特征，适合先跑通流程
 - 全量训练可将 `configs/default.yaml` 中 `train.sample_frac` 调为 `1.0`
