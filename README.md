@@ -34,12 +34,16 @@ xf_lookalike/
 # 1. 数据探索
 E:\miniconda\envs\ml\python.exe scripts/eda.py
 
-# 2. 训练 baseline（默认 5% 采样，快速迭代）
+# 2. 全量流式训练
 E:\miniconda\envs\ml\python.exe scripts/train.py
 
 # 3. 生成测试集提交文件
 E:\miniconda\envs\ml\python.exe scripts/infer.py
 ```
+
+## 实验记录
+
+每次改动与得分：**[doc/EXPERIMENTS.md](doc/EXPERIMENTS.md)**
 
 ## 发布到 GitHub
 
@@ -55,5 +59,5 @@ powershell -ExecutionPolicy Bypass -File scripts/publish_github.ps1
 
 默认仓库名：`xf-lookalike`，账户：`zlsama`（SSH 已配置）。
 
-- baseline 使用 LightGBM + 扁平化 map 特征，适合先跑通流程
-- 全量训练可将 `configs/default.yaml` 中 `train.sample_frac` 调为 `1.0`
+- 训练采用流式全量扫描 + 负采样，详见 `src/data/streaming.py`
+- 详细赛题方案见 `doc/PLAN.md`，数据分析见 `doc/EDA_REPORT.md`

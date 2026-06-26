@@ -21,8 +21,9 @@ eval:
   target: 200
 
 train:
+  streaming: true      # 流式全量扫描，避免 OOM
   neg_ratio: 20
-  sample_frac: 0.05  # baseline 快速迭代采样比例，1.0 为全量
+  sample_frac: 1.0     # streaming 模式下忽略，保留兼容旧脚本
   lgb:
     objective: binary
     metric: auc
@@ -41,4 +42,4 @@ output:
   submission_dir: outputs/submissions
 
 submission:
-  top_k: 2000000  # 评测最大 K=200W，只保留 Top-200W 即可
+  top_k: 200000  # 评测主指标 K=20W

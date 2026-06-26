@@ -27,11 +27,15 @@ def main() -> None:
     splits = get_splits(cfg, project_root())
     test_split = splits["test"]
     model_dir = project_root() / cfg["output"]["model_dir"]
-    model_path = model_dir / "lgb_baseline.txt"
-    meta_path = model_dir / "lgb_baseline_meta.json"
+    model_path = model_dir / "lgb_full.txt"
+    meta_path = model_dir / "lgb_full_meta.json"
 
     if not model_path.exists():
-        raise FileNotFoundError(f"Model not found: {model_path}. Run scripts/train.py first.")
+        # fallback to baseline model name
+        model_path = model_dir / "lgb_baseline.txt"
+        meta_path = model_dir / "lgb_baseline_meta.json"
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model not found under {model_dir}. Run scripts/train.py first.")
 
     with open(meta_path, encoding="utf-8") as f:
         meta = json.load(f)

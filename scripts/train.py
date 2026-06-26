@@ -1,34 +1,22 @@
-"""Train LightGBM baseline on train split, validate on dev split."""
+"""Train LightGBM with streaming full-data pipeline."""
 
 from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import pandas as pd
-
-from src.data.labels import attach_labels, build_positive_ids, build_seed_current_ids, sample_training_frame
-from src.data.load import read_pool_iter
 from src.data.paths import project_root
+from src.data.streaming import build_training_sample, build_validation_sample
 from src.features.flatten import encode_categories, flatten_features
-from src.metrics.eval import evaluate_scores
-from src.models.lgb_trainer import predict_scores, train_lgb_classifier
+from src.metrics.streaming_eval import streaming_evaluate
+from src.models.lgb_trainer import train_lgb_classifier
 from src.utils.config import get_splits, load_config
-
-
-def build_labeled_frame(split, sample_frac: float) -> pd.DataFrame:
-    positive_ids = build_positive_ids(split)
-    seed_current_ids = build_seed_current_ids(split)
-    chunks = []
-    for chunk in read_pool_iter(split.pool_dir, sample_frac=sample_frac):
-        labeled = attach_labels(chunk, positive_ids, seed_current_ids, exclude_seed=True)
-        chunks.append(labeled)
-    return pd.concat(chunks, ignore_index=True)
 
 
 def main() -> None:
@@ -36,52 +24,58 @@ def main() -> None:
     splits = get_splits(cfg, project_root())
     train_cfg = cfg["train"]
     eval_cfg = cfg["eval"]
-    sample_frac = float(train_cfg.get("sample_frac", 0.05))
     neg_ratio = int(train_cfg.get("neg_ratio", 20))
+    use_streaming = bool(train_cfg.get("streaming", True))
 
-    print(f"Loading train split (sample_frac={sample_frac})...")
-    train_raw = build_labeled_frame(splits["train"], sample_frac=sample_frac)
-    print(f"  raw train rows after exclude seed: {len(train_raw):,}, positives: {train_raw['label'].sum():,}")
+    print(f"Building training sample (streaming={use_streaming}, neg_ratio={neg_ratio})...")
+    train_sampled = build_training_sample(splits["train"], neg_ratio=neg_ratio)
+    print(
+        f"  train rows: {len(train_sampled):,}, "
+        f"positives: {int(train_sampled['label'].sum()):,}"
+    )
 
-    train_sampled = sample_training_frame(train_raw, neg_ratio=neg_ratio)
-    print(f"  sampled train rows: {len(train_sampled):,}, positives: {train_sampled['label'].sum():,}")
-
-    print(f"Loading dev split (sample_frac={sample_frac})...")
-    dev_raw = build_labeled_frame(splits["dev"], sample_frac=sample_frac)
-    print(f"  raw dev rows: {len(dev_raw):,}, positives: {dev_raw['label'].sum():,}")
+    print("Building validation sample for early stopping...")
+    valid_sampled = build_validation_sample(splits["dev"], neg_ratio=neg_ratio)
+    print(
+        f"  valid rows: {len(valid_sampled):,}, "
+        f"positives: {int(valid_sampled['label'].sum()):,}"
+    )
 
     train_feat = flatten_features(train_sampled)
-    dev_feat = flatten_features(dev_raw)
+    valid_feat = flatten_features(valid_sampled)
 
-    train_enc, [dev_enc], feature_cols, categories = encode_categories(train_feat, [dev_feat])
+    train_enc, [valid_enc], feature_cols, categories = encode_categories(train_feat, [valid_feat])
     x_train = train_enc[feature_cols]
     y_train = train_sampled["label"]
-    x_dev = dev_enc[feature_cols]
-    y_dev = dev_raw["label"]
+    x_valid = valid_enc[feature_cols]
+    y_valid = valid_sampled["label"]
 
     print("Training LightGBM...")
     model = train_lgb_classifier(
         x_train,
         y_train,
-        x_dev,
-        y_dev,
+        x_valid,
+        y_valid,
         params=train_cfg.get("lgb", {}),
     )
 
     model_dir = project_root() / cfg["output"]["model_dir"]
     model_dir.mkdir(parents=True, exist_ok=True)
-    model_path = model_dir / "lgb_baseline.txt"
+    model_path = model_dir / "lgb_full.txt"
     model.save_model(str(model_path))
     print(f"Model saved: {model_path}")
 
-    dev_scores = predict_scores(model, x_dev)
-    result = evaluate_scores(
-        dev_scores,
-        y_dev.to_numpy(),
+    print("Streaming full dev evaluation...")
+    result = streaming_evaluate(
+        model,
+        splits["dev"],
+        feature_cols,
+        categories,
         k=int(eval_cfg["k"]),
         target=float(eval_cfg["target"]),
     )
-    print("\n=== Dev Evaluation ===")
+    print("\n=== Dev Evaluation (full pool, streaming) ===")
+    print(f"Candidates: {result.n_candidates:,}, Positives: {result.n_positive:,}")
     print(f"Recall@{result.k:,}: {result.recall_at_k:.6f}")
     print(f"Precision@{result.k:,}: {result.precision_at_k:.6f}")
     print(f"Efficiency@{result.k:,}: {result.efficiency_at_k:.6f}")
@@ -89,14 +83,22 @@ def main() -> None:
     print(f"Hits: {result.n_hit}/{result.n_positive} positives in top-{result.k:,}")
 
     meta = {
-        "sample_frac": sample_frac,
+        "version": "v1-stream-full",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "streaming": use_streaming,
         "neg_ratio": neg_ratio,
+        "train_rows": len(train_sampled),
+        "train_positives": int(train_sampled["label"].sum()),
+        "valid_rows": len(valid_sampled),
+        "valid_positives": int(valid_sampled["label"].sum()),
         "feature_cols": feature_cols,
         "categories": categories,
-        "dev_eval": result.__dict__,
+        "dev_eval_full": result.__dict__,
     }
-    with open(model_dir / "lgb_baseline_meta.json", "w", encoding="utf-8") as f:
+    meta_path = model_dir / "lgb_full_meta.json"
+    with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
+    print(f"Meta saved: {meta_path}")
 
 
 if __name__ == "__main__":
