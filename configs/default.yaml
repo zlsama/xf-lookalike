@@ -1,0 +1,44 @@
+data:
+  root: data
+  splits:
+    train:
+      pool: train/final_2026-03-03
+      seed_current: train/seed_2026-03-03
+      seed_next: train/seed_2026-03-04
+      task_id: "2026-03-03"
+    dev:
+      pool: dev/final_2026-03-04
+      seed_current: dev/seed_2026-03-04
+      seed_next: dev/seed_2026-03-05
+      task_id: "2026-03-04"
+    test:
+      pool: test/final_2026-03-05
+      seed_current: test/seed_2026-03-05
+      task_id: "2026-03-05"
+
+eval:
+  k: 200000
+  target: 200
+
+train:
+  neg_ratio: 20
+  sample_frac: 0.05  # baseline 快速迭代采样比例，1.0 为全量
+  lgb:
+    objective: binary
+    metric: auc
+    learning_rate: 0.05
+    num_leaves: 64
+    max_depth: 8
+    min_data_in_leaf: 200
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 5
+    n_estimators: 2000
+    early_stopping_rounds: 100
+
+output:
+  model_dir: outputs/models
+  submission_dir: outputs/submissions
+
+submission:
+  top_k: 2000000  # 评测最大 K=200W，只保留 Top-200W 即可

@@ -1,0 +1,38 @@
+# 官方数据（体积大，本地自行下载）
+data/train/
+data/dev/
+data/test/
+data/**/*.parquet
+data/**/*.zstd.parquet
+
+# 模型与提交产物
+outputs/
+*.txt
+!requirements.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.venv/
+venv/
+.env
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+a.out
+
+# Jupyter
+.ipynb_checkpoints/
+
+# 保留提交样例，忽略大体积提交文件
+outputs/submissions/*.json
+!data/submit_sample.json
